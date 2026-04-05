@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shortify</title>
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/565/565547.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <p class="eyebrow">Shortify</p>
+        <h1>Turn long links into polished, shareable short URLs.</h1>
+        <p class="subtitle">Create branded-looking short links, choose an expiry window, and keep track of clicks.</p>
+
+        <form id="shorten-form" class="shorten-form">
+            <div class="input-group">
+                <label for="url" class="sr-only">Enter long URL</label>
+                <input id="url" name="url" type="url" placeholder="Enter long URL" autocomplete="off" required>
+                <button id="submit-button" type="submit">Shorten</button>
+            </div>
+        </form>
+
+        <p id="field-error" class="field-error hidden"></p>
+        <section id="message" class="message hidden" aria-live="polite"></section>
+
+        <section id="result" class="result hidden">
+            <p class="result-label">Generated short URL</p>
+            <div class="short-url-row">
+                <a id="short-url" class="short-url-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+                <button id="copy-button" type="button" class="secondary-button">Copy</button>
+            </div>
+            <p id="copy-feedback" class="copy-feedback hidden">Copied!</p>
+            <p id="click-count" class="meta-text">Clicks: 0</p>
+            <p id="created-at" class="meta-text"></p>
+            <p id="expiry-time" class="meta-text"></p>
+            <button id="refresh-analytics" type="button" class="secondary-button">Refresh Click Count</button>
+        </section>
+    </section>
+</main>
+
+<script>
+    const form = document.getElementById("shorten-form");
+    const urlInput = document.getElementById("url");
+    const submitButton = document.getElementById("submit-button");
+    const fieldError = document.getElementById("field-error");
+    const messageBox = document.getElementById("message");
+    const resultBox = document.getElementById("result");
+    const shortUrlLink = document.getElementById("short-url");
+    const copyButton = document.getElementById("copy-button");
+    const copyFeedback = document.getElementById("copy-feedback");
+    const clickCount = document.getElementById("click-count");
+    const createdAtText = document.getElementById("created-at");
+    const expiryTimeText = document.getElementById("expiry-time");
+    const refreshAnalyticsButton = document.getElementById("refresh-analytics");
+
+    let currentShortCode = "";
+
+    function formatDate(value) {
+        if (!value) {
+            return "Not available";
+        }
+        return new Date(value).toLocaleString();
+    }
+
+    function showMessage(text, isError) {
+        messageBox.textContent = text;
+        messageBox.className = isError ? "message error" : "message success";
+    }
+
+    function hideMessage() {
+        messageBox.className = "message hidden";
+        messageBox.textContent = "";
+    }
+
+    function showFieldError(text) {
+        fieldError.textContent = text;
+        fieldError.className = "field-error";
+    }
+
+    function hideFieldError() {
+        fieldError.textContent = "";
+        fieldError.className = "field-error hidden";
+    }
+
+    function setLoading(isLoading) {
+        submitButton.disabled = isLoading;
+        submitButton.textContent = isLoading ? "Generating..." : "Shorten";
+    }
+
+    function isValidHttpUrl(value) {
+        return /^https?:\/\/.+/i.test(value.trim());
+    }
+
+    async function loadAnalytics(shortCode) {
+        if (!shortCode) {
+            showMessage("Create a short URL first.", true);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/analytics/${shortCode}?t=${Date.now()}`, {
+                cache: "no-store"
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                showMessage(data.error || "Unable to load analytics", true);
+                return;
+            }
+
+            clickCount.textContent = `Clicks: ${data.clicks}`;
+            createdAtText.textContent = `Created: ${formatDate(data.createdAt)}`;
+            expiryTimeText.textContent = `Expires: ${formatDate(data.expiry)}`;
+        } catch (error) {
+            showMessage("Unable to load click count right now.", true);
+        }
+    }
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        hideFieldError();
+        hideMessage();
+        resultBox.classList.add("hidden");
+        copyFeedback.className = "copy-feedback hidden";
+
+        if (!isValidHttpUrl(urlInput.value)) {
+            showFieldError("Please enter a valid URL starting with http:// or https://");
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            const response = await fetch("/shorten", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    url: urlInput.value.trim()
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                showFieldError(data.error || "Something went wrong");
+                return;
+            }
+
+            shortUrlLink.href = data.shortUrl;
+            shortUrlLink.textContent = data.shortUrl;
+            currentShortCode = data.shortCode;
+            clickCount.textContent = `Clicks: ${data.clicks}`;
+            createdAtText.textContent = `Created: ${formatDate(data.createdAt)}`;
+            expiryTimeText.textContent = `Expires: ${formatDate(data.expiry)}`;
+            resultBox.classList.remove("hidden");
+            showMessage("Short URL is ready to share.", false);
+        } catch (error) {
+            showFieldError("Unable to reach the server. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    shortUrlLink.addEventListener("click", () => {
+        setTimeout(() => {
+            loadAnalytics(currentShortCode);
+        }, 1000);
+    });
+
+    copyButton.addEventListener("click", async () => {
+        if (!shortUrlLink.href || shortUrlLink.href.endsWith("#")) {
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(shortUrlLink.href);
+            copyFeedback.className = "copy-feedback";
+            setTimeout(() => {
+                copyFeedback.className = "copy-feedback hidden";
+            }, 1500);
+        } catch (error) {
+            showMessage("Copy failed. Please copy the URL manually.", true);
+        }
+    });
+
+    refreshAnalyticsButton.addEventListener("click", () => {
+        loadAnalytics(currentShortCode);
+    });
+</script>
+</body>
+</html>
