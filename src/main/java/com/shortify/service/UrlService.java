@@ -8,7 +8,6 @@ import com.shortify.model.Url;
 import com.shortify.repository.UrlRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,14 +26,11 @@ public class UrlService {
 
     private final UrlRepository urlRepository;
 
-    @Value("${app.base-url:http://localhost:8080}")
-    private String baseUrl;
-
     public UrlService(UrlRepository urlRepository) {
         this.urlRepository = urlRepository;
     }
 
-    public ShortenUrlResponse createShortUrl(String longUrl, Integer expiryDays) {
+    public ShortenUrlResponse createShortUrl(String longUrl, Integer expiryDays, String baseUrl) {
         validateUrl(longUrl);
 
         int requestedExpiryDays = normalizeExpiryDays(expiryDays);
@@ -46,11 +42,11 @@ public class UrlService {
                 existingUrl.setExpiryTime(LocalDateTime.now().plusDays(requestedExpiryDays));
                 Url refreshedUrl = urlRepository.save(existingUrl);
                 logger.info("Existing URL refreshed with shortCode={} longUrl={}", refreshedUrl.getShortCode(), refreshedUrl.getLongUrl());
-                return buildShortenResponse(refreshedUrl);
+                return buildShortenResponse(refreshedUrl, baseUrl);
             }
 
             logger.info("Existing short URL returned for longUrl={} shortCode={}", existingUrl.getLongUrl(), existingUrl.getShortCode());
-            return buildShortenResponse(existingUrl);
+            return buildShortenResponse(existingUrl, baseUrl);
         }
 
         Url url = new Url();
@@ -62,7 +58,7 @@ public class UrlService {
         Url updatedUrl = urlRepository.save(savedUrl);
 
         logger.info("Short URL created shortCode={} longUrl={} expiry={}", updatedUrl.getShortCode(), updatedUrl.getLongUrl(), updatedUrl.getExpiryTime());
-        return buildShortenResponse(updatedUrl);
+        return buildShortenResponse(updatedUrl, baseUrl);
     }
 
     @Transactional
@@ -125,10 +121,10 @@ public class UrlService {
         return expiryDays;
     }
 
-    private ShortenUrlResponse buildShortenResponse(Url url) {
+    private ShortenUrlResponse buildShortenResponse(Url url, String baseUrl) {
         return new ShortenUrlResponse(
                 url.getShortCode(),
-                buildShortUrl(url.getShortCode()),
+                buildShortUrl(baseUrl, url.getShortCode()),
                 url.getClickCount(),
                 url.getCreatedAt(),
                 url.getExpiryTime()
@@ -180,7 +176,7 @@ public class UrlService {
         return url.getExpiryTime() != null && url.getExpiryTime().isBefore(LocalDateTime.now());
     }
 
-    private String buildShortUrl(String shortCode) {
+    private String buildShortUrl(String baseUrl, String shortCode) {
         return baseUrl.endsWith("/") ? baseUrl + shortCode : baseUrl + "/" + shortCode;
     }
 }

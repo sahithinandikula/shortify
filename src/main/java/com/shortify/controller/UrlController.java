@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
 
@@ -29,7 +30,8 @@ public class UrlController {
 
     @PostMapping("/shorten")
     public ResponseEntity<ShortenUrlResponse> shortenUrl(@Valid @RequestBody ShortenUrlRequest request) {
-        ShortenUrlResponse response = urlService.createShortUrl(request.getUrl(), request.getExpiryDays());
+        String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
+        ShortenUrlResponse response = urlService.createShortUrl(request.getUrl(), request.getExpiryDays(), baseUrl);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
